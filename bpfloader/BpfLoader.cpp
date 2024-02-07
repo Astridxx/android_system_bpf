@@ -186,26 +186,20 @@ int main(int argc, char** argv) {
         createSysFsBpfSubDir(location.prefix);
     }
 
-    // Load all ELF objects, create programs and maps, and pin them
-    for (const auto& location : locations) {
-        if (loadAllElfObjects(location) != 0) {
-            ALOGE("=== CRITICAL FAILURE LOADING BPF PROGRAMS FROM %s ===", location.dir);
-            ALOGE("If this triggers reliably, you're probably missing kernel options or patches.");
-            ALOGE("If this triggers randomly, you might be hitting some memory allocation "
-                  "problems or startup script race.");
-            ALOGE("--- DO NOT EXPECT SYSTEM TO BOOT SUCCESSFULLY ---");
-            sleep(20);
-            return 2;
+    bool ebpf_supported = android::base::GetBoolProperty("ro.kernel.ebpf.supported", true);
+    if (ebpf_supported) {
+        // Load all ELF objects, create programs and maps, and pin them
+        for (const auto& location : locations) {
+            if (loadAllElfObjects(location) != 0) {
+                ALOGE("=== CRITICAL FAILURE LOADING BPF PROGRAMS FROM %s ===", location.dir);
+                ALOGE("If this triggers reliably, you're probably missing kernel options or patches.");
+                ALOGE("If this triggers randomly, you might be hitting some memory allocation "
+                      "problems or startup script race.");
+                ALOGE("--- DO NOT EXPECT SYSTEM TO BOOT SUCCESSFULLY ---");
+                sleep(20);
+                return 2;
+            }
         }
-    }
-
-    int key = 1;
-    int value = 123;
-    android::base::unique_fd map(
-            android::bpf::createMap(BPF_MAP_TYPE_ARRAY, sizeof(key), sizeof(value), 2, 0));
-    if (android::bpf::writeToMapEntry(map, &key, &value, BPF_ANY)) {
-        ALOGE("Critical kernel bug - failure to write into index 1 of 2 element bpf map array.");
-        return 1;
     }
 
     if (android::base::SetProperty("bpf.progs_loaded", "1") == false) {
